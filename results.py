@@ -1,43 +1,8 @@
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import Select
-import base64
-import pytesseract
-from io import BytesIO
-from PIL import Image
+import re
 import csv
-
-def getCaptcha(driver):
-    ele_captcha = driver.find_element_by_id("imgCaptcha")
-
-    # get the captcha as a base64 string
-    img_captcha_base64 = driver.execute_async_script("""
-        var ele = arguments[0], callback = arguments[1];
-        ele.addEventListener('load', function fn(){
-        ele.removeEventListener('load', fn, false);
-        var cnv = document.createElement('canvas');
-        cnv.width = this.width; cnv.height = this.height;
-        cnv.getContext('2d').drawImage(this, 0, 0);
-        callback(cnv.toDataURL('image/jpeg').substring(22));
-        }, false);
-        ele.dispatchEvent(new Event('load'));
-        """, ele_captcha)
-
-    # save the captcha to a file
-    with open(r"captcha.jpg", 'wb') as f:
-        f.write(base64.b64decode(img_captcha_base64))
-
-    img = Image.open("./captcha.jpg")
-
-    img.save('captcha_original.png')
-    gray = img.convert('L')
-    gray.save('captcha_gray.png')
-    bw = gray.point(lambda x: 0 if x < 200 else 255, mode='1')
-    bw.save('captcha_thresholded.png')
-
-    captcha_value = pytesseract.image_to_string(bw)
-    captcha = driver.find_element_by_name("txtcaptcha")
-    captcha.send_keys(captcha_value)
 
 def getResult(roll, driver):
     marks_xpath = '/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[17]/td/div/table/tbody/tr[2]/td[2]'
@@ -65,17 +30,15 @@ while(roll<18312911045):
     rollno = driver.find_element_by_name("txtrollno")
     rollno.send_keys(roll)
 
-    getCaptcha(driver)
+    captcha_re = re.compile('CaptchaCode=(\d{6})')
+    captcha_value = captcha_re.findall(driver.page_source)
+    captcha = driver.find_element_by_name("txtcaptcha")
+    captcha.send_keys(captcha_value)
 
     submitButton = driver.find_element_by_name("btnsearch")
     submitButton.click()
 
-    try:
-       driver.find_element_by_id('lblmsg')
-       print (roll,"Captcha error")
-       driver.close()
-    except:
-        getResult(roll, driver)
-        driver.close()
-        roll +=1
+    getResult(roll, driver)
+    driver.close()
+    roll +=1
 csv_file.close()
